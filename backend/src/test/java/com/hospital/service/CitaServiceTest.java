@@ -4,7 +4,6 @@ import com.hospital.dto.CitaDTO;
 import com.hospital.exception.ResourceNotFoundException;
 import com.hospital.model.Cita;
 import com.hospital.model.Doctor;
-import com.hospital.model.Paciente;
 import com.hospital.repository.CitaRepository;
 import com.hospital.repository.DoctorRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +36,6 @@ class CitaServiceTest {
     CitaService citaService;
 
     private Doctor doctor1;
-    private Paciente paciente1;
     private Cita cita1;
     private CitaDTO citaDTO;
     private LocalDateTime fechaHora;
@@ -52,14 +50,9 @@ class CitaServiceTest {
         doctor1.setApellido("López");
         doctor1.setEspecialidad("Cardiología");
 
-        paciente1 = new Paciente();
-        paciente1.setId(1L);
-        paciente1.setNombre("Juan");
-        paciente1.setApellido("Pérez");
-
         cita1 = new Cita();
         cita1.setId(1L);
-        cita1.setPaciente(paciente1);
+        cita1.setPacienteId(1L);
         cita1.setDoctor(doctor1);
         cita1.setFechaHora(fechaHora);
         cita1.setMotivo("Chequeo general");
@@ -164,6 +157,7 @@ class CitaServiceTest {
 
         Cita cita2 = new Cita();
         cita2.setId(2L);
+        cita2.setPacienteId(2L);
         cita2.setDoctor(doctor1);
         cita2.setFechaHora(fechaHora); // misma hora
         cita2.setMotivo("Segunda consulta");
@@ -236,7 +230,7 @@ class CitaServiceTest {
         List<Cita> resultado = citaService.listarPorPaciente(1L);
 
         assertThat(resultado).hasSize(1);
-        assertThat(resultado.get(0).getPaciente().getId()).isEqualTo(1L);
+        assertThat(resultado.get(0).getPacienteId()).isEqualTo(1L);
     }
 
     @Test

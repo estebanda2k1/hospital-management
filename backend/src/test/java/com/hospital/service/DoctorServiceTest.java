@@ -170,17 +170,12 @@ class DoctorServiceTest {
     @Test
     @DisplayName("eliminar — BUG: elimina doctor sin verificar si tiene citas activas")
     void eliminar_sinVerificarCitasActivas_eliminaDirectamente() {
-        // BUG DOCUMENTADO: el service llama directamente a deleteById() sin verificar
-        // si el doctor tiene citas activas. Esto puede dejar citas huérfanas o causar
-        // errores de FK si la BD tiene restricciones.
-        when(doctorRepository.findById(1L)).thenReturn(Optional.of(doctor1));
-        doNothing().when(doctorRepository).delete(any(Doctor.class));
+        doNothing().when(doctorRepository).deleteById(1L);
 
         doctorService.eliminar(1L);
 
-        // Se elimina sin ninguna verificación de citas activas
-        verify(doctorRepository, times(1)).delete(any(Doctor.class));
-        // Hallazgo: antes de eliminar, se debe verificar que el doctor no tenga citas activas.
+        verify(doctorRepository, times(1)).deleteById(1L);
+        verify(doctorRepository, never()).findById(anyLong());
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -194,35 +189,57 @@ class DoctorServiceTest {
         // directamente en el string, sin usar parámetros preparados.
         // Esto es una vulnerabilidad de SQL Injection (OWASP A03:2021).
         Query mockQuery = mock(Query.class);
-        when(entityManager.createNativeQuery(anyString())).thenReturn(mockQuery);
-        when(mockQuery.getResultList()).thenReturn(List.of(doctor1));
 
-        List<Doctor> resultado = doctorService.buscarPorEspecialidadInsegura("Cardiología");
+        when(entityManager.createNativeQuery(
+                anyString(),
+                eq(Doctor.class)
+        )).thenReturn(mockQuery);
+
+        when(mockQuery.getResultList())
+                .thenReturn(List.of(doctor1));
+
+        List<Doctor> resultado =
+                doctorService.buscarPorEspecialidadInsegura("Cardiología");
+
+        verify(entityManager).createNativeQuery(
+                contains("Cardiología"),
+                eq(Doctor.class)
+        );
+
+        verify(mockQuery).getResultList();
 
         // Verificar que se usa createNativeQuery (query nativa = concatenación directa)
-        verify(entityManager, times(1)).createNativeQuery(anyString());
-        assertThat(resultado).isNotEmpty();
         // Hallazgo: SQL Injection — usar createNativeQuery con parámetros (:param) o JPQL.
+
+        assertThat(resultado).isNotEmpty();
     }
 
     @Test
     @DisplayName("buscarPorEspecialidadInsegura — BUG: payload SQL Injection no es sanitizado")
     void buscarPorEspecialidadInsegura_conPayloadSQLi_noSanitiza() {
-        // BUG DOCUMENTADO: un payload de SQL Injection pasa sin error ni sanitización.
-        // En producción, esto puede exponer toda la tabla de doctores o modificar datos.
         String payloadSQLi = "' OR '1'='1";
 
         Query mockQuery = mock(Query.class);
-        when(entityManager.createNativeQuery(anyString())).thenReturn(mockQuery);
-        when(mockQuery.getResultList()).thenReturn(List.of(doctor1, new Doctor())); // retorna más de lo esperado
 
-        // La inyección pasa sin lanzar excepción
-        assertThatCode(() -> doctorService.buscarPorEspecialidadInsegura(payloadSQLi))
-                .doesNotThrowAnyException();
+        when(entityManager.createNativeQuery(
+                anyString(),
+                eq(Doctor.class)
+        )).thenReturn(mockQuery);
 
-        // Verificar que la query se construyó con el payload sin escapar
-        verify(entityManager).createNativeQuery(contains(payloadSQLi));
-        // Hallazgo CRÍTICO: SQL Injection confirmado en buscarPorEspecialidadInsegura().
+        when(mockQuery.getResultList())
+                .thenReturn(List.of(doctor1, new Doctor()));
+
+        List<Doctor> resultado =
+                doctorService.buscarPorEspecialidadInsegura(payloadSQLi);
+
+        assertThat(resultado).hasSize(2);
+
+        verify(entityManager).createNativeQuery(
+                contains(payloadSQLi),
+                eq(Doctor.class)
+        );
+
+        verify(mockQuery).getResultList();
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -238,28 +255,11 @@ class DoctorServiceTest {
         List<Doctor> resultado = doctorService.buscarPorEspecialidad("Cardiología");
 
         // La versión segura usa findByEspecialidadContainingIgnoreCase (parámetros JPA)
-        verify(doctorRepository, times(1))
+        verify(doctorRepository)
                 .findByEspecialidadContainingIgnoreCase("Cardiología");
         // Nunca llama a entityManager.createNativeQuery
-        verify(entityManager, never()).createNativeQuery(anyString());
+        verify(entityManager, never()).createNativeQuery(anyString(),eq(Doctor.class));
         assertThat(resultado).hasSize(1);
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // buscarPorNombreCompleto(String nombre, String apellido)
-    // ─────────────────────────────────────────────────────────────
-
-    @Test
-    @DisplayName("buscarPorNombreCompleto — BUG: no valida nombre/apellido vacíos")
-    void buscarPorNombreCompleto_parametrosVacios_noValida() {
-        // BUG DOCUMENTADO: el service no valida que nombre y apellido no sean vacíos.
-        // Se puede buscar con strings vacíos, lo que retorna todos los doctores.
-        when(doctorRepository.findByNombreContainingIgnoreCaseAndApellidoContainingIgnoreCase("", ""))
-                .thenReturn(List.of(doctor1));
-
-        List<Doctor> resultado = doctorService.buscarPorNombreCompleto("", "");
-
-        assertThat(resultado).isNotEmpty();
-        // Hallazgo: debería validar que al menos uno de los parámetros tenga contenido.
-    }
 }

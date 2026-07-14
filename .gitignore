@@ -1,1 +1,22 @@
 target
+target/
+.gitignore
+**/target/**
+
+# Maven
+target/
+**/target/
+
+# IntelliJ
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
